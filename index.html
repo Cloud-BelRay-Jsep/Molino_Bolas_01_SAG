@@ -216,7 +216,7 @@ select:focus,input[type=date]:focus{border-color:var(--cyan)}
   </div></div>
   <div class="fg"><label>Desde</label><input type="date" id="dF"></div>
   <div class="fg"><label>Hasta</label><input type="date" id="dT"></div>
-  <div class="fg"><label>Filtro</label><label class="chk"><input type="checkbox" id="hS"> Ocultar días con molino detenido (T° piñón &lt; <span id="stopV">35</span> °C)</label></div>
+  <div class="fg"><label>Filtro</label><label class="chk"><input type="checkbox" id="hS"> Ocultar días con molino detenido (carga = <span id="stopV">0</span> TPH)</label></div>
 </div>
 
 <div class="err-banner" id="errBanner"></div>
@@ -286,7 +286,7 @@ const SYNERGY_DATE = '';                        // cambio de aceite MB01 (yyyy-m
 const SD = SYNERGY_DATE;
 const MT_START = '';                            // mantención (yyyy-mm-dd) · '' = sin banda (POR CONFIRMAR)
 const MT_END   = '';
-const STOP_PINON_C = 35;                        // molino detenido: promedio diario T° eje piñón < 35 °C (la carga del MB01 no sirve de indicador)
+const STOP_TPH = 0;                             // molino detenido: Carga Molino = 0 TPH
 const CORR_MIN_N = 10;                          // mínimo de días en común para calcular r
 const ALWAYS_SHOW_GROUPS = ['Tonelada Hora Molino','Flujos Descansos','Flujos Piñon','Presiones Descanso','Temperatura Descansos','Temperatura Piñon','Temperatura Estanque'];
 
@@ -425,10 +425,9 @@ function riskLow(c){ return c.alarm!=null&&c.trip!=null&&c.alarm>c.trip; }
 function computeStopped(){
   STOPPED=new Set();
   if(Array.isArray(META.stopped)){ META.stopped.forEach(f=>{ if(!DATA_CUTOFF||f>=DATA_CUTOFF) STOPPED.add(f); }); return; }
-  // Respaldo (script antiguo): promedio diario de T° eje piñón con los datos ya limpios
-  const by={};
-  (GRUPO_COMPS['Temperatura Piñon']||[]).forEach(c=>DATA[c].dates.forEach((f,i)=>(by[f]=by[f]||[]).push(DATA[c].values[i])));
-  Object.keys(by).forEach(f=>{ if((!DATA_CUTOFF||f>=DATA_CUTOFF) && avgVals(by[f])<STOP_PINON_C) STOPPED.add(f); });
+  // Respaldo: carga cruda enviada por el script
+  const src=META.cargaRaw; if(!src||!src.dates) return;
+  src.dates.forEach((f,i)=>{ if((!DATA_CUTOFF||f>=DATA_CUTOFF) && src.values[i]<=STOP_TPH) STOPPED.add(f); });
 }
 const hideStopped=()=>!!(hSEl&&hSEl.checked);
 
@@ -581,7 +580,7 @@ function buildStrip(){
     <div class="sx ${trips.length?'trip':''}"><div class="sx-l">Sensores en trip</div><div class="sx-v">${trips.length}</div><div class="sx-s">${trips.length?escH(names(trips)):'Ninguno'}</div></div>
     <div class="sx ${alarms.length?'alarm':''}"><div class="sx-l">Sensores en alarma</div><div class="sx-v">${alarms.length}</div><div class="sx-s">${normal} en rango normal${alarms.length?' · '+escH(names(alarms)):''}</div></div>
     <div class="sx"><div class="sx-l">Excedencias en el período</div><div class="sx-v">${fmtN(exAlarm+exTrip,0)}</div><div class="sx-s">${fmtN(exAlarm,0)} alarma · ${fmtN(exTrip,0)} trip · sin días detenidos</div></div>
-    <div class="sx ${stopD?'info':''}"><div class="sx-l">Días con molino detenido</div><div class="sx-v">${stopD} <small>/ ${P.n}</small></div><div class="sx-s">T° piñón &lt; ${STOP_PINON_C} °C${hideStopped()?' · ocultos':''}</div></div>`;
+    <div class="sx ${stopD?'info':''}"><div class="sx-l">Días con molino detenido</div><div class="sx-v">${stopD} <small>/ ${P.n}</small></div><div class="sx-s">Carga = ${STOP_TPH} TPH${hideStopped()?' · ocultos':''}</div></div>`;
 }
 
 // ═══ TENDENCIAS ══════════════════════════════════════════════════════════════
@@ -915,7 +914,7 @@ function renderDiag(){
     <tr><td>Generado</td><td>${META.generated?new Date(META.generated).toLocaleString('es-CL'):'—'}</td></tr>
     <tr><td>Último dato</td><td>${fmtD(allDates().slice(-1)[0])}</td></tr>
     <tr><td>Corte de datos</td><td>${DATA_CUTOFF?fmtD(DATA_CUTOFF):'sin corte'}</td></tr>
-    <tr><td>Molino detenido</td><td>T° piñón &lt; ${STOP_PINON_C} °C · ${STOPPED.size} días</td></tr>
+    <tr><td>Molino detenido</td><td>carga = ${STOP_TPH} TPH · ${STOPPED.size} días</td></tr>
     <tr><td>Cambio de aceite</td><td>${fmtD(SYNERGY_DATE)}</td></tr></table></div>`;
   if(sd){
     const used=Object.entries(sd.columnas.usadas).map(([k,v])=>`<tr><td>${escH(k)}</td><td>${escH(v)}</td></tr>`).join('');
@@ -986,7 +985,7 @@ async function loadData(force){
   setStatus('Datos actualizados '+new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'})+' · '+Object.keys(DATA).length+' series · '+nPts+' puntos'+(META.version>=2?'':' · script anterior'),META.version>=2?'#22c55e':'#f59e0b');
 }
 function rebuild(){
-  const sv=document.getElementById('stopV'); if(sv) sv.textContent=STOP_PINON_C;
+  const sv=document.getElementById('stopV'); if(sv) sv.textContent=STOP_TPH;
   buildStrip(); buildKPIs(); buildTrends(); buildHeatmap(); buildCorr(); renderDiag();
 }
 let _inited=false;
